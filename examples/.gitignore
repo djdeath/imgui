@@ -15,6 +15,7 @@ directx11_example/Debug/*
 directx11_example/Release/*
 directx11_example/ipch/*
 directx11_example/x64/*
+gtk3_cogl_example/gtk3_cogl_example
 opengl2_example/Debug/*
 opengl2_example/Release/*
 opengl2_example/ipch/*
