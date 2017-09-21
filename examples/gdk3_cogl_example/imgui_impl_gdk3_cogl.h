@@ -13,6 +13,8 @@
 #include <cogl/cogl2-experimental.h>
 
 IMGUI_API bool        ImGui_ImplGdk3Cogl_Init(GdkWindow* window, CoglFramebuffer *framebuffer, bool install_callbacks);
+IMGUI_API void        ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event);
+
 IMGUI_API void        ImGui_ImplGdk3Cogl_Shutdown();
 IMGUI_API void        ImGui_ImplGdk3Cogl_NewFrame();
 

@@ -181,8 +181,7 @@ void    ImGui_ImplGdk3Cogl_InvalidateDeviceObjects()
     g_clear_pointer(&ImGui::GetIO().Fonts->TexID, cogl_object_unref);
 }
 
-static void gdk_event_handler(GdkEvent *event,
-                              gpointer data)
+void   ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event)
 {
     ImGuiIO& io = ImGui::GetIO();
 
@@ -302,8 +301,6 @@ bool    ImGui_ImplGdk3Cogl_Init(GdkWindow* window, CoglFramebuffer *framebuffer,
     io.GetClipboardTextFn = ImGui_ImplGdk3Cogl_GetClipboardText;
     io.ClipboardUserData = g_Window;
 
-    gdk_event_handler_set(gdk_event_handler, NULL, NULL);
-
     return true;
 }
 
@@ -335,7 +332,6 @@ void ImGui_ImplGdk3Cogl_NewFrame()
     io.DisplayFramebufferScale = ImVec2(scale_factor, scale_factor);
 
     // Setup time step
-
     guint64 current_time =  g_get_monotonic_time();
     io.DeltaTime = g_Time > 0 ? ((float)(current_time - g_Time) / 1000000) : (float)(1.0f/60.0f);
     g_Time = current_time;
