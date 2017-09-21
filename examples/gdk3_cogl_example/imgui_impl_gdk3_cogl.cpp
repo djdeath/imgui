@@ -11,15 +11,174 @@
 #include <imgui.h>
 #include "imgui_impl_gdk3_cogl.h"
 
+#if defined(GDK_WINDOWING_WAYLAND)
+#include <gdk/gdkwayland.h>
+#endif
+#if defined(GDK_WINDOWING_X11)
+#include <gdk/gdkx.h>
+#endif
+#if defined(GDK_WINDOWING_WIN32)
+#include <gdk/win32/gdkwin32.h>
+#endif
+
+#if defined(COGL_HAS_XLIB_SUPPORT)
+#include <cogl/cogl-xlib.h>
+#endif
+
+#define EVENT_MASK \
+    ((GdkEventMask)                  \
+    (GDK_STRUCTURE_MASK |            \
+     GDK_FOCUS_CHANGE_MASK |	     \
+     GDK_EXPOSURE_MASK |             \
+     GDK_PROPERTY_CHANGE_MASK |	     \
+     GDK_ENTER_NOTIFY_MASK |	     \
+     GDK_LEAVE_NOTIFY_MASK |	     \
+     GDK_KEY_PRESS_MASK |            \
+     GDK_KEY_RELEASE_MASK |	     \
+     GDK_BUTTON_PRESS_MASK |	     \
+     GDK_BUTTON_RELEASE_MASK |	     \
+     GDK_POINTER_MOTION_MASK |       \
+     GDK_TOUCH_MASK |                \
+     GDK_SCROLL_MASK))
+
 // Data
-static GdkWindow*       g_Window = NULL;
-static CoglFramebuffer* g_Framebuffer = NULL;
-static guint64          g_Time = 0;
-static bool             g_MousePressed[5] = { false, false, false, false, false };
-static ImVec2           g_MousePosition = ImVec2(-1, -1);
-static float            g_MouseWheel = 0.0f;
-static CoglPipeline*    g_Pipeline = NULL;
-static int              g_NumRedraws = 0;
+static GdkWindow*                      g_Window = NULL;
+static CoglContext*                    g_Context = NULL;
+static CoglFramebuffer*                g_Framebuffer = NULL;
+static guint64                         g_Time = 0;
+static bool                            g_MousePressed[5] = { false, false, false, false, false };
+static ImVec2                          g_MousePosition = ImVec2(-1, -1);
+static float                           g_MouseWheel = 0.0f;
+static CoglPipeline*                   g_Pipeline = NULL;
+static int                             g_NumRedraws = 0;
+static const struct backend_callbacks* g_Callbacks;
+
+// Some Gdk backend specific stuff.
+struct backend_callbacks
+{
+    CoglWinsysID winsys;
+    void (*set_window)(CoglOnscreen* onscreen, GdkWindow *window);
+};
+
+static cairo_region_t *get_window_region(GdkWindow *window)
+{
+    cairo_rectangle_int_t rect = { .x = 0, .y = 0 };
+    gdk_window_get_geometry(window,
+                            NULL, NULL,
+                            &rect.width, &rect.height);
+    return cairo_region_create_rectangle (&rect);
+}
+
+#if defined(GDK_WINDOWING_WAYLAND) && defined(COGL_HAS_EGL_PLATFORM_WAYLAND_SUPPORT)
+static void wayland_set_window(CoglOnscreen* onscreen, GdkWindow *window)
+{
+    cogl_wayland_onscreen_set_foreign_surface(onscreen,
+                                              gdk_wayland_window_get_wl_surface(GDK_WAYLAND_WINDOW(window)));
+
+}
+#endif
+
+#if defined(GDK_WINDOWING_X11) && defined(COGL_HAS_XLIB_SUPPORT)
+static void x11_window_update_foreign_event_mask(CoglOnscreen *onscreen,
+                                                 guint32 event_mask,
+                                                 void *user_data)
+{
+    GdkWindow *window = GDK_WINDOW(user_data);
+
+    /* we assume that a GDK event mask is bitwise compatible with X11
+       event masks */
+    gdk_window_set_events(window, (GdkEventMask) (event_mask | EVENT_MASK));
+}
+
+static GdkFilterReturn
+cogl_gdk_filter (GdkXEvent  *xevent,
+                 GdkEvent   *event,
+                 gpointer    data)
+{
+  CoglOnscreen *onscreen = (CoglOnscreen *) data;
+  CoglRenderer *renderer =
+      cogl_context_get_renderer(cogl_framebuffer_get_context(COGL_FRAMEBUFFER(onscreen)));
+  CoglFilterReturn ret;
+
+  ret = cogl_xlib_renderer_handle_event (renderer, (XEvent *) xevent);
+  switch (ret)
+    {
+    case COGL_FILTER_REMOVE:
+      return GDK_FILTER_REMOVE;
+
+    case COGL_FILTER_CONTINUE:
+    default:
+      return GDK_FILTER_CONTINUE;
+    }
+
+  return GDK_FILTER_CONTINUE;
+}
+
+static void x11_set_window(CoglOnscreen* onscreen, GdkWindow *window)
+{
+    cogl_x11_onscreen_set_foreign_window_xid(onscreen,
+                                             GDK_WINDOW_XID(window),
+                                             x11_window_update_foreign_event_mask,
+                                             window);
+    gdk_window_add_filter(window, cogl_gdk_filter, onscreen);
+}
+#endif
+
+#if defined(GDK_WINDOWING_WIN32) && defined(COGL_HAS_WIN32_SUPPORT)
+static void win32_set_window(CoglOnscreen* onscreen, GdkWindow *window)
+{
+    cogl_win32_onscreen_set_foreign_window(onscreen,
+                                           gdk_win32_window_get_handle(window));
+}
+#endif
+
+static void noop_set_window(CoglOnscreen* onscreen, GdkWindow *window)
+{
+    /* NOOP */
+}
+
+static const struct backend_callbacks *
+get_backend_callbacks(GdkWindow *window)
+{
+#if defined(GDK_WINDOWING_WAYLAND) && defined(COGL_HAS_EGL_PLATFORM_WAYLAND_SUPPORT)
+    if (GDK_IS_WAYLAND_WINDOW(window)) {
+        static const struct backend_callbacks cbs =
+            {
+                //COGL_WINSYS_ID_EGL_WAYLAND,
+                COGL_WINSYS_ID_GLX,
+                wayland_set_window,
+            };
+        return &cbs;
+    }
+#endif
+#if defined(GDK_WINDOWING_X11) && defined(COGL_HAS_XLIB_SUPPORT)
+    if (GDK_IS_X11_WINDOW(window)) {
+        static const struct backend_callbacks cbs =
+            {
+                COGL_WINSYS_ID_EGL_XLIB,
+                x11_set_window,
+            };
+        return &cbs;
+    }
+#endif
+#if defined(GDK_WINDOWING_WIN32) && defined(COGL_HAS_WIN32_SUPPORT)
+    if (GDK_IS_WIN32_WINDOW(window)) {
+        static const struct backend_callbacks cbs =
+            {
+                COGL_WINSYS_ID_WGL,
+                win32_set_window,
+            };
+        return &cbs;
+    }
+#endif
+
+    static const struct backend_callbacks cbs =
+    {
+        COGL_WINSYS_ID_EGL_WAYLAND,
+        noop_set_window,
+    };
+    return &cbs;
+}
 
 // This is the main rendering function that you have to implement and provide to ImGui (via setting up 'RenderDrawListsFn' in the ImGuiIO structure)
 // If text or lines are blurry when integrating ImGui in your engine:
@@ -269,6 +428,13 @@ void   ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event)
         }
         break;
     }
+    case GDK_CONFIGURE:
+    {
+        cairo_region_t *region = get_window_region(g_Window);
+        gdk_window_set_opaque_region(g_Window, region);
+        cairo_region_destroy(region);
+        break;
+    }
     default:
         break;
     }
@@ -282,13 +448,50 @@ void   ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event)
     gdk_frame_clock_request_phase(clock, GDK_FRAME_CLOCK_PHASE_PAINT);
 }
 
-bool    ImGui_ImplGdk3Cogl_Init(GdkWindow* window, CoglFramebuffer *framebuffer, bool install_callbacks)
+struct backend_callbacks;
+
+struct context
+{
+    GdkWindow *window;
+    CoglOnscreen *onscreen;
+  const struct backend_callbacks *callbacks;
+};
+
+CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool install_callbacks)
 {
     g_clear_pointer(&g_Window, g_object_unref);
     g_Window = GDK_WINDOW(g_object_ref(window));
 
     g_clear_pointer(&g_Framebuffer, cogl_object_unref);
-    g_Framebuffer = COGL_FRAMEBUFFER(cogl_object_ref(framebuffer));
+    g_clear_pointer(&g_Context, cogl_object_unref);
+
+    g_Callbacks = get_backend_callbacks(window);
+
+    int scale = gdk_window_get_scale_factor(window);
+    int width, height;
+    gdk_window_get_geometry(window, NULL, NULL, &width, &height);
+
+    cairo_region_t *region = get_window_region(window);
+    gdk_window_set_opaque_region(window, region);
+    cairo_region_destroy(region);
+
+    gdk_window_set_events(window, EVENT_MASK);
+
+    gdk_window_ensure_native(window);
+
+    CoglRenderer *renderer = cogl_renderer_new();
+    cogl_renderer_set_winsys_id(renderer, g_Callbacks->winsys);
+    cogl_xlib_renderer_set_foreign_display(renderer,
+                                           gdk_x11_display_get_xdisplay(gdk_window_get_display(window)));
+
+    g_Context = cogl_context_new(cogl_display_new(renderer, NULL), NULL);
+    CoglOnscreen *onscreen = cogl_onscreen_new(g_Context, width * scale, height * scale);
+    cogl_onscreen_set_resizable(onscreen, TRUE);
+    cogl_object_unref(renderer);
+
+    g_Callbacks->set_window(onscreen, window);
+
+    g_Framebuffer = COGL_FRAMEBUFFER(onscreen);
 
     ImGuiIO& io = ImGui::GetIO();
     for (int i = 0; i < ImGuiKey_COUNT; i++)
@@ -301,13 +504,15 @@ bool    ImGui_ImplGdk3Cogl_Init(GdkWindow* window, CoglFramebuffer *framebuffer,
     io.GetClipboardTextFn = ImGui_ImplGdk3Cogl_GetClipboardText;
     io.ClipboardUserData = g_Window;
 
-    return true;
+    return onscreen;
 }
 
 void ImGui_ImplGdk3Cogl_Shutdown()
 {
     ImGui_ImplGdk3Cogl_InvalidateDeviceObjects();
     ImGui::Shutdown();
+    g_clear_pointer(&g_Framebuffer, cogl_object_unref);
+    g_clear_pointer(&g_Context, cogl_object_unref);
 }
 
 void ImGui_ImplGdk3Cogl_NewFrame()

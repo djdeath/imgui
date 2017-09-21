@@ -12,12 +12,12 @@
 
 #include <cogl/cogl2-experimental.h>
 
-IMGUI_API bool        ImGui_ImplGdk3Cogl_Init(GdkWindow* window, CoglFramebuffer *framebuffer, bool install_callbacks);
-IMGUI_API void        ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event);
+IMGUI_API CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool install_callbacks);
+IMGUI_API void          ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event);
 
-IMGUI_API void        ImGui_ImplGdk3Cogl_Shutdown();
-IMGUI_API void        ImGui_ImplGdk3Cogl_NewFrame();
+IMGUI_API void          ImGui_ImplGdk3Cogl_Shutdown();
+IMGUI_API void          ImGui_ImplGdk3Cogl_NewFrame();
 
 // Use if you want to reset your rendering device without losing ImGui state.
-IMGUI_API void        ImGui_ImplGdk3Cogl_InvalidateDeviceObjects();
-IMGUI_API bool        ImGui_ImplGdk3Cogl_CreateDeviceObjects();
+IMGUI_API void          ImGui_ImplGdk3Cogl_InvalidateDeviceObjects();
+IMGUI_API bool          ImGui_ImplGdk3Cogl_CreateDeviceObjects();
