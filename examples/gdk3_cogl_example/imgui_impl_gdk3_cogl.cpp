@@ -448,16 +448,13 @@ void   ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event)
     gdk_frame_clock_request_phase(clock, GDK_FRAME_CLOCK_PHASE_PAINT);
 }
 
-struct backend_callbacks;
-
-struct context
+static void handle_gdk_event(GdkEvent *event, void *data)
 {
-    GdkWindow *window;
-    CoglOnscreen *onscreen;
-  const struct backend_callbacks *callbacks;
-};
+    ImGui_ImplGdk3Cogl_HandleEvent(event);
+}
 
-CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool install_callbacks)
+
+CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool handle_events)
 {
     g_clear_pointer(&g_Window, g_object_unref);
     g_Window = GDK_WINDOW(g_object_ref(window));
@@ -475,6 +472,7 @@ CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool install_callbacks)
     gdk_window_set_opaque_region(window, region);
     cairo_region_destroy(region);
 
+    gdk_event_handler_set(handle_gdk_event, NULL, NULL);
     gdk_window_set_events(window, EVENT_MASK);
 
     gdk_window_ensure_native(window);

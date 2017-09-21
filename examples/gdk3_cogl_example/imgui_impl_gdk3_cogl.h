@@ -12,7 +12,7 @@
 
 #include <cogl/cogl2-experimental.h>
 
-IMGUI_API CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool install_callbacks);
+IMGUI_API CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool handle_events);
 IMGUI_API void          ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event);
 
 IMGUI_API void          ImGui_ImplGdk3Cogl_Shutdown();

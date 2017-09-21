@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 
     GdkWindow *window =
         gdk_window_new(NULL, &win_attrs, GDK_WA_TITLE | GDK_WA_WMCLASS | GDK_WA_VISUAL);
-    CoglOnscreen *onscreen = ImGui_ImplGdk3Cogl_Init(window, true);
+    CoglOnscreen *onscreen = ImGui_ImplGdk3Cogl_Init(window, false);
 
     GMainLoop *loop = g_main_loop_new(NULL, FALSE);
 
