@@ -420,7 +420,8 @@ void   ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event)
                     io.KeysDown[gdk_key_to_imgui_key[i].imgui] = type == GDK_KEY_PRESS;
             }
 
-            if ((unicode = gdk_keyval_to_unicode(keyval)) != 0)
+            if (type == GDK_KEY_PRESS &&
+                (unicode = gdk_keyval_to_unicode(keyval)) != 0)
             {
                 char *unicode_chars = (char *) &unicode;
                 io.AddInputCharactersUTF8(unicode_chars);
