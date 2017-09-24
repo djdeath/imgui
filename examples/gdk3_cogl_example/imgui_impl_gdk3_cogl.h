@@ -15,6 +15,8 @@
 IMGUI_API CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool handle_events);
 IMGUI_API void          ImGui_ImplGdk3Cogl_HandleEvent(GdkEvent *event);
 
+IMGUI_API CoglContext*  ImGui_ImplGdk3Cogl_GetContext();
+
 IMGUI_API void          ImGui_ImplGdk3Cogl_Shutdown();
 IMGUI_API void          ImGui_ImplGdk3Cogl_NewFrame();
 

@@ -506,6 +506,11 @@ CoglOnscreen* ImGui_ImplGdk3Cogl_Init(GdkWindow* window, bool handle_events)
     return onscreen;
 }
 
+CoglContext*  ImGui_ImplGdk3Cogl_GetContext()
+{
+    return g_Context;
+}
+
 void ImGui_ImplGdk3Cogl_Shutdown()
 {
     ImGui_ImplGdk3Cogl_InvalidateDeviceObjects();
