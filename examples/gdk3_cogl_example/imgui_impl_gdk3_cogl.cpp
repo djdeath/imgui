@@ -49,7 +49,8 @@ static guint64                         g_Time = 0;
 static bool                            g_MousePressed[5] = { false, false, false, false, false };
 static ImVec2                          g_MousePosition = ImVec2(-1, -1);
 static float                           g_MouseWheel = 0.0f;
-static CoglPipeline*                   g_Pipeline = NULL;
+static CoglPipeline*                   g_ColorPipeline = NULL;
+static CoglPipeline*                   g_ImagePipeline = NULL;
 static int                             g_NumRedraws = 0;
 static const struct backend_callbacks* g_Callbacks;
 
@@ -247,15 +248,24 @@ void ImGui_ImplGdk3Cogl_RenderDrawLists(ImDrawData* draw_data)
             }
             else
             {
-                cogl_pipeline_set_layer_texture(g_Pipeline, 0,
-                                                pcmd->TextureId ? COGL_TEXTURE(pcmd->TextureId) : NULL);
+                bool has_texture = pcmd->TextureId != NULL;
+                CoglPipeline *pipeline =
+                    has_texture ?
+                    (cogl_is_pipeline(pcmd->TextureId) ?
+                     (CoglPipeline *) pcmd->TextureId : g_ImagePipeline) :
+                    g_ColorPipeline;
+
+                if (has_texture && pipeline == g_ImagePipeline) {
+                    cogl_pipeline_set_layer_texture(g_ImagePipeline, 0,
+                                                    COGL_TEXTURE(pcmd->TextureId));
+                }
 
                 cogl_framebuffer_push_scissor_clip(g_Framebuffer,
                                                    pcmd->ClipRect.x,
                                                    pcmd->ClipRect.y,
                                                    pcmd->ClipRect.z - pcmd->ClipRect.x,
                                                    pcmd->ClipRect.w - pcmd->ClipRect.y);
-                cogl_primitive_draw(primitive, g_Framebuffer, g_Pipeline);
+                cogl_primitive_draw(primitive, g_Framebuffer, pipeline);
                 cogl_framebuffer_pop_clip(g_Framebuffer);
             }
             idx_buffer_offset += pcmd->ElemCount;
@@ -267,8 +277,6 @@ void ImGui_ImplGdk3Cogl_RenderDrawLists(ImDrawData* draw_data)
         cogl_object_unref(vertices);
         cogl_object_unref(indices);
     }
-
-    cogl_framebuffer_draw_rectangle(g_Framebuffer, g_Pipeline, 0, 0, 10, 10);
 }
 
 static const char* ImGui_ImplGdk3Cogl_GetClipboardText(void* user_data)
@@ -301,10 +309,11 @@ bool ImGui_ImplGdk3Cogl_CreateFontsTexture()
 
 bool ImGui_ImplGdk3Cogl_CreateDeviceObjects()
 {
-    g_Pipeline = cogl_pipeline_new(cogl_framebuffer_get_context(g_Framebuffer));
+    g_ColorPipeline = cogl_pipeline_new(cogl_framebuffer_get_context(g_Framebuffer));
+    g_ImagePipeline = cogl_pipeline_new(cogl_framebuffer_get_context(g_Framebuffer));
 
     CoglError *error = NULL;
-    if (!cogl_pipeline_set_blend(g_Pipeline,
+    if (!cogl_pipeline_set_blend(g_ColorPipeline,
                                  "RGB = ADD(SRC_COLOR*(SRC_COLOR[A]), DST_COLOR*(1-SRC_COLOR[A]))"
                                  "A = ADD(SRC_COLOR[A], DST_COLOR*(1-SRC_COLOR[A]))",
                                  &error))
@@ -313,13 +322,31 @@ bool ImGui_ImplGdk3Cogl_CreateDeviceObjects()
         g_error_free(error);
         return false;
     }
-    cogl_pipeline_set_cull_face_mode(g_Pipeline, COGL_PIPELINE_CULL_FACE_MODE_NONE);
+    cogl_pipeline_set_cull_face_mode(g_ColorPipeline, COGL_PIPELINE_CULL_FACE_MODE_NONE);
 
     CoglDepthState depth_state;
 
     cogl_depth_state_init(&depth_state);
     cogl_depth_state_set_test_enabled(&depth_state, FALSE);
-    if (!cogl_pipeline_set_depth_state(g_Pipeline, &depth_state, &error))
+    if (!cogl_pipeline_set_depth_state(g_ColorPipeline, &depth_state, &error))
+    {
+        g_warning("Depth: %s", error->message);
+        g_error_free(error);
+        return false;
+    }
+
+    if (!cogl_pipeline_set_blend(g_ImagePipeline,
+                                 "RGB = ADD(SRC_COLOR*(SRC_COLOR[A]), DST_COLOR*(1-SRC_COLOR[A]))"
+                                 "A = ADD(SRC_COLOR[A], DST_COLOR*(1-SRC_COLOR[A]))",
+                                 &error))
+    {
+        g_warning("Blending: %s", error->message);
+        g_error_free(error);
+        return false;
+    }
+    cogl_pipeline_set_cull_face_mode(g_ImagePipeline, COGL_PIPELINE_CULL_FACE_MODE_NONE);
+
+    if (!cogl_pipeline_set_depth_state(g_ImagePipeline, &depth_state, &error))
     {
         g_warning("Depth: %s", error->message);
         g_error_free(error);
@@ -336,7 +363,8 @@ bool ImGui_ImplGdk3Cogl_CreateDeviceObjects()
 
 void    ImGui_ImplGdk3Cogl_InvalidateDeviceObjects()
 {
-    g_clear_pointer(&g_Pipeline, cogl_object_unref);
+    g_clear_pointer(&g_ColorPipeline, cogl_object_unref);
+    g_clear_pointer(&g_ImagePipeline, cogl_object_unref);
     g_clear_pointer(&ImGui::GetIO().Fonts->TexID, cogl_object_unref);
 }
 
@@ -521,7 +549,7 @@ void ImGui_ImplGdk3Cogl_Shutdown()
 
 void ImGui_ImplGdk3Cogl_NewFrame()
 {
-    if (!g_Pipeline)
+    if (!g_ColorPipeline)
         ImGui_ImplGdk3Cogl_CreateDeviceObjects();
 
     if (g_NumRedraws > 0)
